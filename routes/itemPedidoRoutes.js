@@ -1,18 +1,18 @@
 import { Router } from 'express';
 import {
   criar,
-  listar,
+  listarPorComanda,
   buscarPorId,
   atualizar,
-  excluir
-} from '../controllers/produtoController.js';
+  alterarStatus
+} from '../controllers/itemPedidoController.js';
 
 const router = Router();
 
 router.post('/', criar);
-router.get('/', listar);
+router.get('/comanda/:comandaId', listarPorComanda);
 router.get('/:id', buscarPorId);
+router.patch('/:id/status', alterarStatus);
 router.patch('/:id', atualizar);
-router.delete('/:id', excluir);
 
 export default router;

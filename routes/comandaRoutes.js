@@ -3,16 +3,14 @@ import {
   criar,
   listar,
   buscarPorId,
-  atualizarStatus,
-  excluir
-} from '../controllers/mesaController.js';
+  alterarStatus
+} from '../controllers/comandaController.js';
 
 const router = Router();
 
 router.post('/', criar);
 router.get('/', listar);
 router.get('/:id', buscarPorId);
-router.patch('/:id/status', atualizarStatus);
-router.delete('/:id', excluir);
+router.patch('/:id/status', alterarStatus);
 
 export default router;
