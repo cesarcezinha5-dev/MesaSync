@@ -1,12 +1,18 @@
 import { Router } from 'express';
-import * as mesaController from '../controllers/mesaController.js';
+import {
+  criar,
+  listar,
+  buscarPorId,
+  atualizarStatus,
+  excluir
+} from '../controllers/mesaController.js';
 
 const router = Router();
 
-router.post('/', mesaController.criar);
-router.get('/', mesaController.listar);
-router.get('/:id', mesaController.buscarPorId);
-router.patch('/:id/status', mesaController.atualizarStatus);
-router.delete('/:id', mesaController.excluir);
+router.post('/', criar);
+router.get('/', listar);
+router.get('/:id', buscarPorId);
+router.patch('/:id/status', atualizarStatus);
+router.delete('/:id', excluir);
 
 export default router;

@@ -1,84 +1,221 @@
-import * as itemPedidoModel from '../models/itemPedidoModel.js';
-import * as produtoModel from '../models/produtoModel.js';
-import * as comandaModel from '../models/comandaModel.js';
+import * as itemPedidoModel from '../models/itempedidoModel.js';
 
-/**
- * ADICIONAR ITEM
- * Regras: Congela o preço do produto e atualiza o valor total da comanda.
- */
-export async function adicionar(req, res) {
-    const { fk_comanda_id_comanda, fk_produto_id_produto, qtde_item, observacao_item } = req.body;
+const statusPermitidos = [
+  'PENDENTE',
+  'EM_PREPARO',
+  'PRONTO',
+  'ENTREGUE',
+  'CANCELADO'
+];
 
-    if (!fk_comanda_id_comanda || !fk_produto_id_produto || !qtde_item) {
-        return res.status(400).json({ error: 'IDs da comanda, do produto e quantidade são obrigatórios.' });
+export async function criar(req, res) {
+  const {
+    fk_comanda_id_comanda,
+    fk_produto_id_produto,
+    qtde_item,
+    observacao_item
+  } = req.body;
+
+  const idComanda = Number(fk_comanda_id_comanda);
+  const idProduto = Number(fk_produto_id_produto);
+  const quantidade = Number(qtde_item);
+
+  if (!Number.isInteger(idComanda) || idComanda <= 0) {
+    return res.status(400).json({
+      error: 'fk_comanda_id_comanda deve ser um ID válido.'
+    });
+  }
+
+  if (!Number.isInteger(idProduto) || idProduto <= 0) {
+    return res.status(400).json({
+      error: 'fk_produto_id_produto deve ser um ID válido.'
+    });
+  }
+
+  if (!Number.isInteger(quantidade) || quantidade <= 0) {
+    return res.status(400).json({
+      error: 'qtde_item deve ser um número inteiro maior que zero.'
+    });
+  }
+
+  try {
+    const item = await itemPedidoModel.criar({
+      fk_comanda_id_comanda: idComanda,
+      fk_produto_id_produto: idProduto,
+      qtde_item: quantidade,
+      observacao_item
+    });
+
+    return res.status(201).json(item);
+  } catch (error) {
+    if (error.code === '23503') {
+      return res.status(404).json({
+        error: 'Comanda ou produto não encontrado.'
+      });
     }
 
-    try {
-        // 1. Busca o produto para validar a existência e obter o preço atual
-        const produto = await produtoModel.buscarPorId(fk_produto_id_produto);
-        
-        if (!produto) {
-            return res.status(404).json({ error: 'Produto não encontrado no cardápio.' });
-        }
-
-        // 2. Busca a comanda para validar se está aberta
-        const comanda = await comandaModel.buscarPorId(fk_comanda_id_comanda);
-        
-        if (!comanda) {
-            return res.status(404).json({ error: 'Comanda não encontrada.' });
-        }
-        if (comanda.status_comanda !== 'A') {
-            return res.status(400).json({ error: 'Não é possível adicionar itens a uma comanda fechada.' });
-        }
-
-        // 3. Regra de Negócio: CONGELAMENTO DE PREÇO
-        const preco_congelado = produto.preco_produto;
-
-        // 4. Registo do item na base de dados
-        const novoItem = await itemPedidoModel.adicionar({
-            fk_comanda_id_comanda,
-            fk_produto_id_produto,
-            qtde_item,
-            observacao_item,
-            preco_congelado
-        });
-
-        // 5. Regra de Negócio: RECÁLCULO DO VALOR TOTAL DA COMANDA
-        const valorAdicional = preco_congelado * qtde_item;
-        const novoValorTotal = parseFloat(comanda.valor_total) + valorAdicional;
-        
-        await comandaModel.atualizarValorTotal(fk_comanda_id_comanda, novoValorTotal);
-
-        // 6. Retorno de sucesso
-        res.status(201).json(novoItem);
-
-    } catch (error) {
-        console.error('Erro ao adicionar item ao pedido:', error);
-        res.status(500).json({ error: 'Erro interno ao adicionar o item.' });
+    if (error.code === 'P0001') {
+      return res.status(409).json({
+        error: error.message
+      });
     }
+
+    console.error('Erro ao criar item do pedido:', error);
+    return res.status(500).json({
+      error: 'Erro ao criar item do pedido.'
+    });
+  }
 }
 
-/**
- * ATUALIZAR STATUS DO PREPARO (Ação da Cozinha)
- */
-export async function atualizarStatus(req, res) {
-    const { id } = req.params;
-    const { status_item } = req.body; // Ex: 'E' (Em Preparo) ou 'R' (Pronto)
+export async function listarPorComanda(req, res) {
+  const idComanda = Number(req.params.comandaId);
 
-    if (!status_item || !['P', 'E', 'R'].includes(status_item)) {
-        return res.status(400).json({ error: 'Status inválido. Use P, E ou R.' });
+  if (!Number.isInteger(idComanda) || idComanda <= 0) {
+    return res.status(400).json({
+      error: 'ID da comanda inválido.'
+    });
+  }
+
+  try {
+    const itens = await itemPedidoModel.listarPorComanda(idComanda);
+    return res.status(200).json(itens);
+  } catch (error) {
+    console.error('Erro ao listar itens do pedido:', error);
+    return res.status(500).json({
+      error: 'Erro ao listar itens do pedido.'
+    });
+  }
+}
+
+export async function buscarPorId(req, res) {
+  const id = Number(req.params.id);
+
+  if (!Number.isInteger(id) || id <= 0) {
+    return res.status(400).json({ error: 'ID inválido.' });
+  }
+
+  try {
+    const item = await itemPedidoModel.buscarPorId(id);
+
+    if (!item) {
+      return res.status(404).json({
+        error: 'Item do pedido não encontrado.'
+      });
     }
 
-    try {
-        const itemAtualizado = await itemPedidoModel.atualizarStatus(id, status_item);
-        
-        // Como o modelo ainda é um "stub", não conseguimos verificar se o item existe de facto antes de atualizar.
-        // Num cenário real, se itemAtualizado for null, retornaríamos 404.
-        
-        res.status(200).json(itemAtualizado);
+    return res.status(200).json(item);
+  } catch (error) {
+    console.error('Erro ao buscar item do pedido:', error);
+    return res.status(500).json({
+      error: 'Erro ao buscar item do pedido.'
+    });
+  }
+}
 
-    } catch (error) {
-        console.error('Erro ao atualizar status do item:', error);
-        res.status(500).json({ error: 'Erro interno ao atualizar o status.' });
+export async function atualizar(req, res) {
+  const id = Number(req.params.id);
+  const { qtde_item, observacao_item } = req.body;
+
+  if (!Number.isInteger(id) || id <= 0) {
+    return res.status(400).json({ error: 'ID inválido.' });
+  }
+
+  const dados = {};
+
+  if (qtde_item !== undefined) {
+    const quantidade = Number(qtde_item);
+
+    if (!Number.isInteger(quantidade) || quantidade <= 0) {
+      return res.status(400).json({
+        error: 'qtde_item deve ser um número inteiro maior que zero.'
+      });
     }
+
+    dados.qtde_item = quantidade;
+  }
+
+  if (observacao_item !== undefined) {
+    if (typeof observacao_item !== 'string') {
+      return res.status(400).json({
+        error: 'observacao_item deve ser um texto.'
+      });
+    }
+
+    dados.observacao_item = observacao_item;
+  }
+
+  if (Object.keys(dados).length === 0) {
+    return res.status(400).json({
+      error: 'Informe qtde_item ou observacao_item para atualizar.'
+    });
+  }
+
+  try {
+    const item = await itemPedidoModel.atualizar(id, dados);
+
+    if (!item) {
+      return res.status(404).json({
+        error: 'Item do pedido não encontrado.'
+      });
+    }
+
+    return res.status(200).json(item);
+  } catch (error) {
+    if (error.code === 'P0001') {
+      return res.status(409).json({
+        error: error.message
+      });
+    }
+
+    console.error('Erro ao atualizar item do pedido:', error);
+    return res.status(500).json({
+      error: 'Erro ao atualizar item do pedido.'
+    });
+  }
+}
+
+export async function alterarStatus(req, res) {
+  const id = Number(req.params.id);
+  const { status_item } = req.body;
+
+  if (!Number.isInteger(id) || id <= 0) {
+    return res.status(400).json({ error: 'ID inválido.' });
+  }
+
+  if (!statusPermitidos.includes(status_item)) {
+    return res.status(400).json({
+      error: 'status_item inválido.'
+    });
+  }
+
+  try {
+    const itemAtual = await itemPedidoModel.buscarPorId(id);
+
+    if (!itemAtual) {
+      return res.status(404).json({
+        error: 'Item do pedido não encontrado.'
+      });
+    }
+
+    if (itemAtual.status_item === 'CANCELADO') {
+      return res.status(409).json({
+        error: 'Um item cancelado não pode ser alterado.'
+      });
+    }
+
+    const item = await itemPedidoModel.alterarStatus(id, status_item);
+
+    return res.status(200).json(item);
+  } catch (error) {
+    if (error.code === 'P0001') {
+      return res.status(409).json({
+        error: error.message
+      });
+    }
+
+    console.error('Erro ao alterar status do item:', error);
+    return res.status(500).json({
+      error: 'Erro ao alterar status do item.'
+    });
+  }
 }
